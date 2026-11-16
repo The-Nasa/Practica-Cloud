@@ -44,18 +44,16 @@ jobs:
               echo "Creando .env inicial de staging..."
               RAND_DB_PASS=$(openssl rand -hex 16)
               RAND_APP_PASS=$(openssl rand -hex 20)
-              cat <<EOT > .env
-STAGING_DB_PASSWORD=${RAND_DB_PASS}
-STAGING_APP_PASSWORD=${RAND_APP_PASS}
-SITE_ADDRESS=:80
-SITE_ORIGIN=http://${{ secrets.EC2_HOST }}
-STAGING_DB_PORT=25433
-RELEASE_TAG=latest
-NODE_ENV=staging
-SESSION_COOKIE_SECURE=false
-COURIER_FEE_BPS=8000
-PENDING_ORDER_TTL_MINUTES=15
-EOT
+              echo "STAGING_DB_PASSWORD=${RAND_DB_PASS}" > .env
+              echo "STAGING_APP_PASSWORD=${RAND_APP_PASS}" >> .env
+              echo "SITE_ADDRESS=:80" >> .env
+              echo "SITE_ORIGIN=http://${{ secrets.EC2_HOST }}" >> .env
+              echo "STAGING_DB_PORT=25433" >> .env
+              echo "RELEASE_TAG=latest" >> .env
+              echo "NODE_ENV=staging" >> .env
+              echo "SESSION_COOKIE_SECURE=false" >> .env
+              echo "COURIER_FEE_BPS=8000" >> .env
+              echo "PENDING_ORDER_TTL_MINUTES=15" >> .env
               echo ".env generado correctamente."
             fi
 
