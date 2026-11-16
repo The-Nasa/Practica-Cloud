@@ -12,6 +12,7 @@ import { useCustomerAddresses } from '../customer/customerAddressModel';
 import { checkoutJournalKey, pendingFor, saveCheckoutIntent, type PendingCheckout } from './checkoutIntent';
 import { parseCashCents } from './checkoutFlow';
 import { formatCents } from '../../lib/currency';
+import { safeRandomUUID } from '../../lib/uuidPolyfill';
 
 const quoteKey = (quote?: GroupQuote | null) => JSON.stringify(quote && { ...quote, stores: quote.stores.map(({ cashTenderCents, cashChangeCents, ...store }) => store) });
 async function quotePurchase(body: PurchaseInput, multi: boolean, signal?: AbortSignal): Promise<GroupQuote> {
@@ -156,7 +157,7 @@ export function useCheckout() {
     let attempt = pending;
     try {
       if (!attempt) {
-        attempt = saveCheckoutIntent(userId, { key: crypto.randomUUID(), group: multi,
+        attempt = saveCheckoutIntent(userId, { key: safeRandomUUID(), group: multi,
           body: { ...baseBody, cashTenderCents: multi ? null : cashGivenCents, expectedTotalCents: quote!.totalCents }, snapshot: selectedItems.map(item => ({ ...item })) });
         setJournal({ owner: userId, value: attempt });
       }
