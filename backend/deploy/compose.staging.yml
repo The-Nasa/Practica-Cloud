@@ -1,0 +1,85 @@
+name: quickly-staging
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: quickly_stage
+      POSTGRES_DB: quickly_stage
+      POSTGRES_PASSWORD: ${STAGING_DB_PASSWORD:?Configure staging secrets}
+    ports: ["127.0.0.1:${STAGING_DB_PORT:-25433}:5432"]
+    volumes:
+      - stage_db:/var/lib/postgresql/data
+      - ../001_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -h 127.0.0.1 -U quickly_stage -d quickly_stage"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging: &logging
+      driver: json-file
+      options: {max-size: 10m, max-file: '3'}
+  migrate:
+    image: quickly-stage-api:${RELEASE_TAG:-local}
+    command: [node, scripts/migrate.cjs]
+    environment: &api_env
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      DATABASE_USER: quickly_stage
+      DATABASE_NAME: quickly_stage
+      DATABASE_PASSWORD: ${STAGING_DB_PASSWORD:?Configure staging secrets}
+      CORS_ORIGIN: ${SITE_ORIGIN:?Configure origin}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
+      TRUST_PROXY_HOPS: '1'
+      HTTP_ACCESS_LOG: 'true'
+      MEDIA_ROOT: /app/media
+      COURIER_FEE_BPS: ${COURIER_FEE_BPS:-8000}
+      PENDING_ORDER_TTL_MINUTES: ${PENDING_ORDER_TTL_MINUTES:-15}
+    depends_on: {db: {condition: service_healthy}}
+    logging: *logging
+  provision:
+    image: quickly-stage-api:${RELEASE_TAG:-local}
+    command: [node, scripts/provision-runtime.cjs]
+    environment:
+      <<: *api_env
+      RUNTIME_DATABASE_PASSWORD: ${STAGING_APP_PASSWORD:?Configure separate runtime secret}
+    depends_on: {migrate: {condition: service_completed_successfully}}
+    logging: *logging
+  api:
+    image: quickly-stage-api:${RELEASE_TAG:-local}
+    build: {context: ..}
+    restart: unless-stopped
+    environment:
+      <<: *api_env
+      DATABASE_USER: quickly_app
+      DATABASE_PASSWORD: ${STAGING_APP_PASSWORD:?Configure separate runtime secret}
+      NOTIFICATION_INTERVAL_SECONDS: '30'
+      ORDER_EXPIRATION_INTERVAL_SECONDS: '30'
+    volumes: [stage_media:/app/media]
+    depends_on: {provision: {condition: service_completed_successfully}}
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/v1/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 7s
+      retries: 10
+    stop_grace_period: 30s
+    init: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    logging: *logging
+  web:
+    image: quickly-stage-web:${RELEASE_TAG:-local}
+    build: {context: ../../Frontend-Quickly}
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?Configure hostname}
+    ports: ["${HTTP_BIND:-80}:80", "${HTTPS_BIND:-443}:443"]
+    volumes: [stage_caddy_data:/data, stage_caddy_config:/config]
+    depends_on: {api: {condition: service_healthy}}
+    logging: *logging
+volumes:
+  stage_db:
+  stage_caddy_data:
+  stage_caddy_config:
+  stage_media:

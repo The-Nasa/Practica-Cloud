@@ -1,0 +1,259 @@
+import React, { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
+import { useCustomerNotifications, accountChanged } from './customerAccountModel';
+import { engagementApi } from '../../services/api/engagementApi';
+import { RemoteState } from '../operations/shared';
+import { useAuthStore } from '../../store/authStore';
+import { formatDateTime } from '../../lib/date';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { Button } from '../../components/ui/Button';
+import {
+  Bell,
+  Check,
+  CheckCheck,
+  Package,
+  Bike,
+  Tag,
+  ShieldCheck,
+  Info,
+  ChevronRight,
+  Filter,
+} from 'lucide-react';
+
+export const CustomerNotificationsPage: React.FC = () => {
+  const resource = useCustomerNotifications();
+  const userNotifications = resource.data || [];
+  const [actionError, setActionError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const busyRef = React.useRef(false);
+  async function markNotificationAsRead(id?: string) { if (busyRef.current) return; busyRef.current = true; setBusy(true); setActionError(""); const owner = currentUser?.id; try { await engagementApi.read(id); if (useAuthStore.getState().currentUser?.id === owner) accountChanged("notifications"); } catch (e) { setActionError(e instanceof Error ? e.message : "No se pudo marcar la notificación."); } finally { busyRef.current = false; setBusy(false); } }
+  const { currentUser } = useAuthStore();
+  const [filter, setFilter] = useState<'all' | 'unread'>('all');
+
+  const unreadCount = useMemo(
+    () => userNotifications.filter((n) => !n.isRead).length,
+    [userNotifications]
+  );
+
+  const displayedNotifications = useMemo(() => {
+    if (filter === 'unread') {
+      return userNotifications.filter((n) => !n.isRead);
+    }
+    return userNotifications;
+  }, [userNotifications, filter]);
+
+  // Icon and theme config based on type
+  const getTypeBadge = (type: string) => {
+    switch (type) {
+      case 'order':
+        return {
+          icon: <Package className="w-4 h-4 text-primary" />,
+          label: 'Pedido',
+          bg: 'bg-primary-50 text-primary border-primary-100',
+        };
+      case 'delivery':
+        return {
+          icon: <Bike className="w-4 h-4 text-emerald-700" />,
+          label: 'Entrega',
+          bg: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+        };
+      case 'promo':
+        return {
+          icon: <Tag className="w-4 h-4 text-amber-700" />,
+          label: 'Promoción',
+          bg: 'bg-amber-50 text-amber-800 border-amber-200',
+        };
+      case 'system':
+      default:
+        return {
+          icon: <ShieldCheck className="w-4 h-4 text-sky-700" />,
+          label: 'Sistema',
+          bg: 'bg-sky-50 text-sky-800 border-sky-200',
+        };
+    }
+  };
+
+  return (
+    <div className="max-w-3xl mx-auto space-y-6 pb-20 sm:pb-8">
+      {/* Header with Title and Actions con Tipografía Oechsle */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl sm:text-3xl font-black text-gray-950 tracking-tight">Centro de Notificaciones</h1>
+            {unreadCount > 0 && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-900 bg-gray-100 px-3 py-0.5 rounded-full border border-gray-200">
+                <span>{unreadCount} sin leer</span>
+              </span>
+            )}
+          </div>
+          <p className="text-xs sm:text-sm text-gray-500 font-medium mt-1">
+            Actualizaciones de tus pedidos en Tingo María y avisos de la plataforma
+          </p>
+        </div>
+
+        {unreadCount > 0 && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void markNotificationAsRead()}
+            className="touch-target inline-flex items-center gap-1.5 text-xs font-bold text-gray-900 hover:text-black bg-gray-100 hover:bg-gray-200 border border-gray-200 px-4 py-2 rounded-full transition-all self-start sm:self-center cursor-pointer"
+          >
+            <CheckCheck className="w-4 h-4 stroke-[2.2]" />
+            <span>Marcar todas como leídas</span>
+          </button>
+        )}
+      </div>
+
+      {/* Filter Tabs Integradas */}
+      <div className="flex items-center gap-1.5 p-1.5 bg-[#eaeff2] rounded-full w-fit text-xs font-bold select-none">
+        <button
+          type="button"
+          onClick={() => setFilter('all')}
+          className={`min-h-[38px] px-4 py-1.5 rounded-full transition-all cursor-pointer ${
+            filter === 'all'
+              ? 'bg-gray-950 text-white font-black shadow-xs'
+              : 'text-gray-700 hover:text-gray-950 hover:bg-white/60'
+          }`}
+        >
+          Todas ({userNotifications.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setFilter('unread')}
+          className={`min-h-[38px] px-4 py-1.5 rounded-full transition-all cursor-pointer ${
+            filter === 'unread'
+              ? 'bg-gray-950 text-white font-black shadow-xs'
+              : 'text-gray-700 hover:text-gray-950 hover:bg-white/60'
+          }`}
+        >
+          Sin leer ({unreadCount})
+        </button>
+      </div>
+
+      <RemoteState loading={resource.loading} error={resource.error} retry={resource.reload} />
+      {actionError && <p role="alert" className="text-destructive">{actionError}</p>}
+      {/* Notifications List */}
+      {resource.loading || resource.error ? null : displayedNotifications.length === 0 ? (
+        <div className="bg-[#eaeff2] p-8 sm:p-12 rounded-3xl border-0 text-center space-y-4 select-none">
+          <div className="w-14 h-14 rounded-2xl bg-gray-950 text-white flex items-center justify-center mx-auto shadow-xs">
+            <Bell className="w-7 h-7 stroke-[2.2]" />
+          </div>
+          <h2 className="font-black text-xl sm:text-2xl text-gray-950 tracking-tight">
+            {filter === 'unread' ? 'No tienes notificaciones pendientes' : 'No tienes notificaciones'}
+          </h2>
+          <p className="text-xs sm:text-sm text-gray-600 font-medium max-w-md mx-auto leading-relaxed">
+            {filter === 'unread'
+              ? 'Estás al día con todos los avisos y estados de tus pedidos.'
+              : 'Cuando realices un pedido o haya promociones en Tingo María te avisaremos aquí.'}
+          </p>
+          {filter === 'unread' && (
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setFilter('all')}
+                className="inline-flex items-center justify-center min-h-[44px] px-8 py-3 rounded-full bg-gray-950 hover:bg-black text-white font-black text-xs sm:text-sm shadow-md transition-all active:scale-95 cursor-pointer"
+              >
+                Ver todas las notificaciones
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {displayedNotifications.map((notif) => {
+            const badge = getTypeBadge(notif.type);
+
+            return (
+              <div
+                key={notif.id}
+                className={`relative p-4 sm:p-5 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                  notif.isRead
+                    ? 'bg-white border-gray-100 shadow-subtle'
+                    : 'bg-primary-50/50 border-primary-100 shadow-sm'
+                }`}
+              >
+                {/* Left Content Area */}
+                <div className="flex items-start gap-3.5 flex-1">
+                  {/* Unread indicator dot */}
+                  {!notif.isRead ? (
+                    <div className="mt-2.5 flex-shrink-0" title="No leída">
+                      <span className="block w-2.5 h-2.5 rounded-full bg-primary ring-4 ring-primary-100 animate-pulse" />
+                    </div>
+                  ) : (
+                    <div className="w-2.5 flex-shrink-0" />
+                  )}
+
+                  {/* Icon badge */}
+                  <div className="w-10 h-10 rounded-xl bg-white border border-gray-100 flex items-center justify-center flex-shrink-0 shadow-subtle mt-0.5">
+                    {badge.icon}
+                  </div>
+
+                  {/* Text details */}
+                  <div className="space-y-1 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2
+                        className={`text-sm sm:text-base leading-snug ${
+                          notif.isRead ? 'font-semibold text-ink' : 'font-extrabold text-ink'
+                        }`}
+                      >
+                        {notif.title}
+                      </h2>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badge.bg}`}
+                      >
+                        {badge.label}
+                      </span>
+                    </div>
+
+                    <p
+                      className={`text-xs sm:text-sm leading-relaxed ${
+                        notif.isRead ? 'text-ink-light' : 'text-gray-700 font-medium'
+                      }`}
+                    >
+                      {notif.message}
+                    </p>
+
+                    <div className="flex items-center gap-3 pt-1">
+                      <span className="text-[11px] text-gray-500">
+                        {formatDateTime(notif.createdAt)}
+                      </span>
+
+                      {notif.linkUrl && (
+                        <Link
+                          to={notif.linkUrl}
+                          onClick={() => {
+                            if (!notif.isRead) markNotificationAsRead(notif.id);
+                          }}
+                          className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:text-primary-hover hover:underline"
+                        >
+                          <span>Ver detalle</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Action Button */}
+                {!notif.isRead && (
+                  <div className="self-end sm:self-center pl-6 sm:pl-0 flex-shrink-0">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void markNotificationAsRead(notif.id)}
+                      className="touch-target inline-flex items-center gap-1.5 text-xs font-bold text-gray-600 hover:text-primary bg-white hover:bg-primary-50 border border-gray-200 hover:border-primary-200 px-3 py-2 rounded-xl transition-all shadow-subtle min-h-[44px]"
+                      aria-label="Marcar como leída"
+                    >
+                      <Check className="w-3.5 h-3.5 text-primary stroke-[2.5]" />
+                      <span>Leída</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};

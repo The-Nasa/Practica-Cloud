@@ -1,0 +1,87 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: quickly-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME:-quickly_db}
+      POSTGRES_USER: ${DATABASE_USER:-quickly_user}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?Ejecute npm run dev:setup primero}
+      TZ: America/Lima
+    ports:
+      - "127.0.0.1:${DATABASE_PORT:-5433}:5432"
+    volumes:
+      - ./001_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./002_verificar.sql:/scripts/002_verificar.sql:ro
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - quickly-net
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: quickly-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${API_NODE_ENV:-development}
+      PORT: 3000
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_USER: ${DATABASE_USER:-quickly_user}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:?Ejecute npm run dev:setup primero}
+      DATABASE_NAME: ${DATABASE_NAME:-quickly_db}
+      DATABASE_URL: postgresql://${DATABASE_USER:-quickly_user}:${DATABASE_PASSWORD}@postgres:5432/${DATABASE_NAME:-quickly_db}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-72}
+      AUTH_RATE_LIMIT: ${AUTH_RATE_LIMIT:-30}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      COURIER_FEE_BPS: ${COURIER_FEE_BPS:-8000}
+      MEDIA_ROOT: /app/media
+      PENDING_ORDER_TTL_MINUTES: ${PENDING_ORDER_TTL_MINUTES:-15}
+      ORDER_EXPIRATION_INTERVAL_SECONDS: ${ORDER_EXPIRATION_INTERVAL_SECONDS:-30}
+      NOTIFICATION_INTERVAL_SECONDS: ${NOTIFICATION_INTERVAL_SECONDS:-30}
+    volumes:
+      - ${MEDIA_HOST_PATH:-./.media}:/app/media
+    ports:
+      - "127.0.0.1:${PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - quickly-net
+
+  postgres-test:
+    image: postgres:17-alpine
+    container_name: quickly-postgres-test
+    profiles: [test]
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: quickly_test
+      POSTGRES_PASSWORD: ${TEST_DATABASE_PASSWORD:?Ejecute npm run dev:setup primero}
+      TZ: America/Lima
+    ports:
+      - "127.0.0.1:${TEST_DATABASE_PORT:-15432}:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quickly_test -d postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+    networks:
+      - quickly-net
+
+volumes:
+  postgres_data:
+    name: quickly-postgres-data
+
+networks:
+  quickly-net:
+    name: quickly-network
+    driver: bridge
