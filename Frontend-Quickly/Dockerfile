@@ -3,7 +3,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY . .
-ARG VITE_GOOGLE_CLIENT_ID
+ARG VITE_GOOGLE_CLIENT_ID=624053175206-f6a6k9rli4k47nebe80d6d42lmfdpo3k.apps.googleusercontent.com
 ENV VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID}
 ENV VITE_API_BASE_URL=/api/v1
 RUN npm run build

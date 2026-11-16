@@ -58,10 +58,14 @@ jobs:
             fi
 
             echo "=== 4. Construyendo y levantando contenedores ==="
-            # Usar sudo si el usuario todavia no tiene sesion refrescada con el grupo docker
-            DOCKER_CMD="docker compose"
-            if ! docker ps &> /dev/null; then
+            if docker compose version &> /dev/null; then
+              DOCKER_CMD="docker compose"
+            elif sudo docker compose version &> /dev/null; then
+              DOCKER_CMD="sudo docker compose"
+            elif command -v docker-compose &> /dev/null; then
               DOCKER_CMD="sudo docker-compose"
+            else
+              DOCKER_CMD="docker-compose"
             fi
 
             $DOCKER_CMD -f compose.staging.yml up -d --build --remove-orphans
