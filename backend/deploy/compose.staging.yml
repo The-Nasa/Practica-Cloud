@@ -23,14 +23,17 @@ services:
     image: quickly-stage-api:${RELEASE_TAG:-local}
     command: [node, scripts/migrate.cjs]
     environment: &api_env
-      NODE_ENV: ${NODE_ENV:-production}
-      DATABASE_HOST: db
-      DATABASE_PORT: 5432
-      DATABASE_USER: quickly_stage
-      DATABASE_NAME: quickly_stage
-      DATABASE_PASSWORD: ${STAGING_DB_PASSWORD:?Configure staging secrets}
-      CORS_ORIGIN: ${SITE_ORIGIN:?Configure origin}
-      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
+      NODE_ENV: ${NODE_ENV:-staging}
+      DATABASE_URL: ${DATABASE_URL:-}
+      DATABASE_HOST: ${DATABASE_HOST:-db}
+      DATABASE_PORT: ${DATABASE_PORT:-5432}
+      DATABASE_USER: ${DATABASE_USER:-quickly_stage}
+      DATABASE_NAME: ${DATABASE_NAME:-quickly_stage}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-${STAGING_DB_PASSWORD:-}}
+      DATABASE_SSL: ${DATABASE_SSL:-false}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      CORS_ORIGIN: ${SITE_ORIGIN:-http://localhost}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
       TRUST_PROXY_HOPS: '1'
       HTTP_ACCESS_LOG: 'true'
       MEDIA_ROOT: /app/media
@@ -43,7 +46,7 @@ services:
     command: [node, scripts/provision-runtime.cjs]
     environment:
       <<: *api_env
-      RUNTIME_DATABASE_PASSWORD: ${STAGING_APP_PASSWORD:?Configure separate runtime secret}
+      RUNTIME_DATABASE_PASSWORD: ${STAGING_APP_PASSWORD:-random_runtime_password_long_enough_32}
     depends_on: {migrate: {condition: service_completed_successfully}}
     logging: *logging
   api:
@@ -52,8 +55,8 @@ services:
     restart: unless-stopped
     environment:
       <<: *api_env
-      DATABASE_USER: quickly_app
-      DATABASE_PASSWORD: ${STAGING_APP_PASSWORD:?Configure separate runtime secret}
+      DATABASE_USER: ${DATABASE_USER:-quickly_app}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-${STAGING_APP_PASSWORD:-}}
       NOTIFICATION_INTERVAL_SECONDS: '30'
       ORDER_EXPIRATION_INTERVAL_SECONDS: '30'
     volumes: [stage_media:/app/media]
@@ -70,7 +73,10 @@ services:
     logging: *logging
   web:
     image: quickly-stage-web:${RELEASE_TAG:-local}
-    build: {context: ../../Frontend-Quickly}
+    build:
+      context: ../../Frontend-Quickly
+      args:
+        VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
     restart: unless-stopped
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:?Configure hostname}

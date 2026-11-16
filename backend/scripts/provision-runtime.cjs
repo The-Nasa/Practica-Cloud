@@ -21,6 +21,10 @@ async function provision(db, password) {
 }
 module.exports = { provision };
 if (require.main === module) {
+  if (process.env.DATABASE_URL?.includes('supabase') || process.env.DATABASE_HOST?.includes('supabase')) {
+    console.log('Base de datos externa (Supabase) detectada: rol de ejecucion gestionado externamente.');
+    process.exit(0);
+  }
   const db = new Client({host:process.env.DATABASE_HOST,port:Number(process.env.DATABASE_PORT||5432),user:process.env.DATABASE_USER,
     password:process.env.DATABASE_PASSWORD,database:process.env.DATABASE_NAME,connectionTimeoutMillis:5000});
   (async()=>{try{await db.connect();await provision(db,process.env.RUNTIME_DATABASE_PASSWORD);console.log('Rol de ejecución preparado sin permisos de administrador ni DDL.');}finally{await db.end();}})()
